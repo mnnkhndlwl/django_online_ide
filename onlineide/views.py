@@ -1,17 +1,36 @@
+from winreg import QueryInfoKey
 from django.http import HttpResponse
+from django.contrib.auth.models import User
+from django.contrib.auth import login
 from rest_framework.viewsets import ModelViewSet
+from rest_framework import permissions
 from .models import User, Submissions
-from .serializers import UserSerializer, SubmissionsSerializer
+from .serializers import SubmissionsSerializer,UserSerializer
 from .utils import create_code_file, execute_file
-
+from rest_framework.authtoken.serializers import AuthTokenSerializer
+from knox.views import LoginView as KnoxLoginView
 
 def hello_world(request):
     return HttpResponse("Welcome to online ide")
 
 
+class LoginView(KnoxLoginView):
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request, format=None):
+        serializer = AuthTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        login(request, user)
+        return super(LoginView, self).post(request, format=None)
+
+
 class UserViewSet(ModelViewSet):
-    queryset = User.objects.all()
     serializer_class = UserSerializer
+    permission_classes = (permissions.IsAuthenticated,) 
+    queryset = User.objects.all()       
+
+
 
 
 class SubmissionsViewSet(ModelViewSet):
