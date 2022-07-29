@@ -11,6 +11,7 @@ from .utils import create_code_file, execute_file
 from rest_framework.authtoken.serializers import AuthTokenSerializer
 from knox.views import LoginView as KnoxLoginView
 from rest_framework.decorators import api_view, permission_classes
+import multiprocessing as mp
 
 def hello_world(request):
     return HttpResponse("Welcome to online ide")
@@ -48,11 +49,27 @@ class UserViewSet(ModelViewSet):
 class SubmissionsViewSet(ModelViewSet):
     queryset = Submissions.objects.all()
     serializer_class = SubmissionsSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        queryset = queryset.filter(user=request.user)
+        return Response(self.get_serializer(queryset, many=True).data, status=200)
 
     def create(self, request, *args, **kwargs):
         request.data["status"] = "P"
+        request.data["user"] = request.user.pk 
         file_name = create_code_file(request.data.get("code"),
                                      request.data.get("language"))
-        output = execute_file(file_name, request.data.get("language"))
-        request.data["output"] = output
-        return super().create(request, args, kwargs)
+
+        serializer = SubmissionsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        submission = serializer.save()
+
+        p = mp.Process(target=execute_file,
+                    args=(file_name, request.data.get("language"), submission.pk))
+        p.start()
+        
+        return Response({
+            "message" : "Submitted successfully " 
+        }, status=200)
